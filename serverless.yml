@@ -18,6 +18,7 @@ provider:
     DB_NAME: ppm_presupuestos
     DB_USER: ${ssm:/ppm/presupuestos/db-user}
     DB_PASSWORD: ${ssm:/ppm/presupuestos/db-password}
+    UMBRAL_ALERTA_PCT: "90"
   # AWS Academy no permite crear roles IAM: se reusa LabRole.
   # En una cuenta propia, borra la linea `role:` y descomenta los permisos,
   # que son los minimos que este microservicio necesita.
@@ -56,14 +57,96 @@ custom:
     identitySource: method.request.header.Authorization
 
 functions:
+
   health:
     handler: src/handlers/health.manejar
     events:
-      - http:
-          path: /health
-          method: get
-          cors: true
-          authorizer: ${self:custom.autorizador}
+      - http: { path: "/health", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
 
-  # TODO(carloscondor1610): tus endpoints van aqui. Minimo 5 protegidos.
-  # Copia el bloque de health y cambia path/method/handler.
+  listarPresupuestos:
+    handler: src/handlers/presupuestos.listar
+    description: Ejecucion presupuestal de todos los proyectos del tenant
+    events:
+      - http: { path: "/presupuestos", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+
+  obtenerPresupuesto:
+    handler: src/handlers/presupuestos.obtener
+    description: Detalle con partidas, ultimos gastos y proyeccion de horas
+    events:
+      - http: { path: "/presupuestos/{proyecto_id}", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+
+  aprobarPresupuesto:
+    handler: src/handlers/presupuestos.aprobar
+    description: El PMO fija el monto aprobado y las partidas
+    events:
+      - http: { path: "/presupuestos/{proyecto_id}/aprobar", method: post, cors: true, authorizer: "${self:custom.autorizador}" }
+
+  listarGastos:
+    handler: src/handlers/presupuestos.listar_gastos
+    events:
+      - http: { path: "/presupuestos/{proyecto_id}/gastos", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+
+  registrarGasto:
+    handler: src/handlers/presupuestos.registrar_gasto
+    description: Publica gasto.registrado y, al cruzar el 90%, presupuesto.excedido
+    events:
+      - http: { path: "/presupuestos/{proyecto_id}/gastos", method: post, cors: true, authorizer: "${self:custom.autorizador}" }
+
+  resumenEjecucion:
+    handler: src/handlers/presupuestos.resumen
+    description: Totales del tenant para el dashboard
+    events:
+      - http: { path: "/ejecucion", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+
+  worker:
+    handler: src/handlers/worker.manejar
+    description: Crea presupuestos y proyecta costos a partir de eventos
+    timeout: 60
+    events:
+      - sqs:
+          arn: !GetAtt ColaPresupuestos.Arn
+          batchSize: 10
+
+resources:
+  Resources:
+    ColaPresupuestos:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ppm-cola-presupuestos-${sls:stage}
+        VisibilityTimeout: 120
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ColaPresupuestosDLQ.Arn
+          maxReceiveCount: 3
+
+    ColaPresupuestosDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ppm-cola-presupuestos-dlq-${sls:stage}
+        MessageRetentionPeriod: 1209600
+
+    SuscripcionPresupuestos:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: ${cf:infra-compartida-${sls:stage}.SnsEventosArn}
+        Protocol: sqs
+        Endpoint: !GetAtt ColaPresupuestos.Arn
+        FilterPolicy:
+          tipo:
+            - proyecto.creado
+            - recurso.asignado
+
+    PermisoSnsEnCola:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref ColaPresupuestos
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal: { Service: sns.amazonaws.com }
+              Action: sqs:SendMessage
+              Resource: !GetAtt ColaPresupuestos.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: ${cf:infra-compartida-${sls:stage}.SnsEventosArn}
