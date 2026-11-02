@@ -35,7 +35,7 @@ def _crear_presupuesto(cur, datos):
         VALUES (%s, %s, %s, 0, 'borrador')
         ON CONFLICT (proyecto_id) DO NOTHING
         RETURNING id
-    """, (datos["proyecto_id"], datos.get("codigo"), datos.get("nombre")))
+    """, (int(datos["proyecto_id"]), datos.get("codigo"), datos.get("nombre")))
     return cur.fetchone()
 
 
@@ -45,7 +45,7 @@ def _proyectar_costo(cur, datos):
     El costo_proyectado es una columna generada: horas x costo_hora x semanas.
     """
     cur.execute("SELECT id FROM presupuestos WHERE proyecto_id = %s",
-                (datos["proyecto_id"],))
+                (int(datos["proyecto_id"]),))
     presupuesto = cur.fetchone()
     if not presupuesto:
         # El proyecto es de otro tenant o el evento llego antes que
