@@ -5,7 +5,7 @@ queda. El presupuesto no se crea por HTTP: lo crea el worker cuando
 ms-portafolios publica proyecto.creado.
 """
 import os
-
+import math
 from psycopg.rows import dict_row
 
 from src import db, roles
@@ -86,43 +86,58 @@ def obtener(event, context):
 
 
 def aprobar(event, context):
-    """POST /presupuestos/{proyecto_id}/aprobar — solo el PMO fija el monto."""
+    """POST /presupuestos/{proyecto_id}/aprobar — solo PMO y ADMIN."""
     negado = roles.exige(event, roles.PMO, roles.ADMIN)
     if negado:
         return negado
 
     proyecto_id = event["pathParameters"]["proyecto_id"]
     c = cuerpo_de(event)
-    monto = c.get("monto_aprobado")
-    if monto is None or float(monto) <= 0:
-        return error("MONTO_INVALIDO", "Se requiere monto_aprobado mayor que 0")
+    try:
+        monto = float(c.get("monto_aprobado"))
+    except (TypeError, ValueError, OverflowError):
+        return error("MONTO_INVALIDO", "El monto debe ser numerico", 400)
+    if not math.isfinite(monto) or monto <= 0:
+        return error("MONTO_INVALIDO", "El monto debe ser finito y mayor que 0", 400)
+
+    partidas = c.get("partidas")
+    if partidas is None:
+        partidas = {"Personal": 0.5, "Materiales": 0.3, "Servicios": 0.2}
+    if not isinstance(partidas, dict) or not partidas or any(
+        not isinstance(nombre, str) or not nombre.strip() for nombre in partidas
+    ):
+        return error("PARTIDAS_INVALIDAS", "Las partidas deben ser un objeto con nombres validos", 400)
+    try:
+        porcentajes = {nombre: float(pct) for nombre, pct in partidas.items()}
+    except (TypeError, ValueError, OverflowError):
+        return error("PARTIDAS_INVALIDAS", "Los porcentajes deben ser numericos", 400)
+    if (any(not math.isfinite(pct) or pct < 0 for pct in porcentajes.values())
+            or not math.isclose(sum(porcentajes.values()), 1.0, rel_tol=0, abs_tol=1e-6)):
+        return error("PARTIDAS_INVALIDAS", "Los porcentajes deben ser no negativos y sumar 1", 400)
 
     with db.conexion(tenant_de(event)) as con:
         with con.cursor(row_factory=dict_row) as cur:
             cur.execute("""
                 UPDATE presupuestos
-                SET    monto_aprobado = %s, estado = 'aprobado',
-                       aprobado_por = %s, aprobado_en = now(),
-                       alerta_enviada = FALSE
-                WHERE  proyecto_id = %s
+                SET monto_aprobado = %s, estado = 'aprobado',
+                    aprobado_por = %s, aprobado_en = now(),
+                    alerta_enviada = FALSE
+                WHERE proyecto_id = %s
                 RETURNING id
             """, (monto, usuario_de(event), proyecto_id))
             fila = cur.fetchone()
             if not fila:
                 return error("NO_ENCONTRADO",
                              f"El proyecto {proyecto_id} no tiene presupuesto. "
-                             "Se crea solo cuando ms-portafolios publica "
-                             "proyecto.creado.", 404)
+                             "Se crea cuando ms-portafolios publica proyecto.creado.", 404)
 
-            # Partidas por defecto, si el PMO no definio ninguna
-            for nombre, pct in c.get("partidas", {}).items() or \
-                    {"Personal": 0.5, "Materiales": 0.3, "Servicios": 0.2}.items():
+            for nombre, pct in porcentajes.items():
                 cur.execute("""
                     INSERT INTO partidas (presupuesto_id, nombre, monto_asignado)
                     VALUES (%s, %s, %s)
                     ON CONFLICT (presupuesto_id, nombre)
                     DO UPDATE SET monto_asignado = EXCLUDED.monto_asignado
-                """, (fila["id"], nombre, float(monto) * float(pct)))
+                """, (fila["id"], nombre, monto * pct))
 
             cur.execute("SELECT * FROM ejecucion WHERE id = %s", (fila["id"],))
             presupuesto = cur.fetchone()
@@ -166,14 +181,14 @@ def registrar_gasto(event, context):
     proyecto_id = event["pathParameters"]["proyecto_id"]
     c = cuerpo_de(event)
 
-    if not c.get("concepto"):
-        return error("DATOS_INCOMPLETOS", "Falta el concepto del gasto")
+    if not isinstance(c.get("concepto"), str) or not c["concepto"].strip():
+        return error("DATOS_INCOMPLETOS", "Falta el concepto del gasto", 400)
     try:
         monto = float(c.get("monto", 0))
-    except (TypeError, ValueError):
-        return error("MONTO_INVALIDO", "El monto debe ser numerico")
-    if monto <= 0:
-        return error("MONTO_INVALIDO", "El monto debe ser mayor que 0")
+    except (TypeError, ValueError, OverflowError):
+        return error("MONTO_INVALIDO", "El monto debe ser numerico", 400)
+    if not math.isfinite(monto) or monto <= 0:
+        return error("MONTO_INVALIDO", "El monto debe ser finito y mayor que 0", 400)
 
     with db.conexion(tenant_id) as con:
         with con.cursor(row_factory=dict_row) as cur:
