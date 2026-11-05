@@ -55,6 +55,10 @@ custom:
     # Linux, que es donde corre la Lambda.
     dockerizePip: true
     slim: true
+    # Cache propio por repo. El cache global de ~/.cache lo comparten todos
+    # los servicios, y si dos despliegues corren a la vez un contenedor lo
+    # deja en root:root mientras el otro lo lee -> EACCES.
+    cacheLocation: ./.serverless-cache
   autorizador:
     # El authorizer vive en infra-compartida y lo comparten los 6 microservicios
     name: autorizadorCompartido
