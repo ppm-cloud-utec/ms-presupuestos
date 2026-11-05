@@ -1,0 +1,16 @@
+{
+  "name": "ms-presupuestos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Despliegue serverless de ms-presupuestos (proyecto PPM, CS2032)",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "info": "serverless info --verbose",
+    "logs": "serverless logs -f"
+  },
+  "devDependencies": {
+    "serverless": "3.40.0",
+    "serverless-python-requirements": "6.1.2"
+  }
+}

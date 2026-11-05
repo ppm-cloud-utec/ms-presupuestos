@@ -1,6 +1,9 @@
 service: ms-presupuestos
 
-frameworkVersion: "4"
+# Se usa la v3 a proposito: la v4 exige una cuenta de serverless.com y un
+# SERVERLESS_ACCESS_KEY para cada deploy. La v3 solo necesita credenciales
+# de AWS, que es lo unico que da el Learner Lab.
+frameworkVersion: "3"
 
 provider:
   name: aws
