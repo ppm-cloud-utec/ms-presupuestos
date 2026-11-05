@@ -53,10 +53,12 @@ Ese es el punto del EDA: este servicio no conoce a los otros dos.
 ## Desplegar
 
 ```bash
-pip install -r requirements.txt
-npm install
-sls deploy
+npm install            # instala Serverless v3 y el plugin de Python
+npx serverless deploy
 ```
+
+Necesita **Docker corriendo** si este microservicio usa RDS: el plugin compila
+`psycopg` contra Amazon Linux dentro de un contenedor.
 
 ## Cargar datos
 
