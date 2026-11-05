@@ -49,7 +49,11 @@ plugins:
 
 custom:
   pythonRequirements:
-    dockerizePip: non-linux
+    # true, no "non-linux": en Linux "non-linux" NO usa Docker y busca un
+    # binario python3.12 local, que no existe (el sistema trae 3.14).
+    # Forzar Docker ademas garantiza que psycopg se compile contra Amazon
+    # Linux, que es donde corre la Lambda.
+    dockerizePip: true
     slim: true
   autorizador:
     # El authorizer vive en infra-compartida y lo comparten los 6 microservicios
