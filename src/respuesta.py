@@ -1,6 +1,9 @@
 """Forma unica de respuesta para los 6 microservicios."""
 import json
 from decimal import Decimal
+from datetime import datetime,date
+
+from uuid import UUID
 
 CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -9,12 +12,18 @@ CORS = {
 }
 
 
-class _Codificador(json.JSONEncoder):
-    """DynamoDB devuelve Decimal y json no sabe serializarlo."""
 
+class _Codificador(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, Decimal):
-            return float(o) if o % 1 else int(o)
+            return float(o)
+
+        if isinstance(o, (datetime, date)):
+            return o.isoformat()
+
+        if isinstance(o, UUID):
+            return str(o)
+
         return super().default(o)
 
 
