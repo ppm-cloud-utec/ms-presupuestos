@@ -42,3 +42,15 @@ def conexion(tenant_id):
         raise
     finally:
         con.close()
+
+
+@contextmanager
+def conexion_admin():
+    """Conexion SIN tenant, para crear o borrar el schema de uno nuevo.
+
+    `conexion(tenant_id)` exige que el tenant ya este habilitado y fija el
+    search_path. En el alta pasa justo lo contrario: el schema todavia no
+    existe. Por eso el aprovisionador entra por aqui.
+    """
+    with psycopg.connect(_dsn()) as con:
+        yield con

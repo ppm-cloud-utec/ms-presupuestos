@@ -16,7 +16,6 @@ disparado no puede llevarse por delante los datos de la demo.
 """
 import os
 
-import psycopg
 from psycopg import sql
 
 from src import db, tenants
@@ -32,11 +31,6 @@ def _servicio():
     return os.environ.get("SERVICIO", os.environ.get("DB_NAME", "desconocido"))
 
 
-def _conectar():
-    """Conexion sin tenant: el schema todavia no existe o se va a borrar."""
-    return psycopg.connect(**db._parametros())
-
-
 def aprovisionar(event, context):
     """Crea el schema del tenant y aplica el DDL de este servicio."""
     tenant_id = event["tenant_id"]
@@ -46,7 +40,7 @@ def aprovisionar(event, context):
     with open(RUTA_DDL, encoding="utf-8") as f:
         ddl = f.read()
 
-    with _conectar() as con:
+    with db.conexion_admin() as con:
         with con.cursor() as cur:
             # Identifier() cita el nombre correctamente; el regex de
             # tenants.py ya garantizo que solo trae [a-z0-9_].
@@ -77,7 +71,7 @@ def compensar(event, context):
             f"{tenant_id} es un tenant original: no se compensa jamas")
     schema = tenants.esquema_para(tenant_id)
 
-    with _conectar() as con:
+    with db.conexion_admin() as con:
         with con.cursor() as cur:
             cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE")
                         .format(sql.Identifier(schema)))
