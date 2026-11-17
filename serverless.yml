@@ -19,8 +19,8 @@ provider:
     TABLA_EVENTOS_PROCESADOS: ${cf:infra-compartida-${sls:stage}.TablaEventosProcesados}
     DB_HOST: ${cf:infra-compartida-${sls:stage}.RdsEndpoint}
     DB_NAME: ppm_presupuestos
-    DB_USER: ${ssm:/ppm/presupuestos/db-user}
-    DB_PASSWORD: ${ssm:/ppm/presupuestos/db-password}
+    # Usuario y clave viven juntos en este secreto. Ver src/secretos.py.
+    DB_SECRETO: ppm/presupuestos/db
     UMBRAL_ALERTA_PCT: "90"
   # AWS Academy no permite crear roles IAM: se reusa LabRole.
   # En una cuenta propia, borra la linea `role:` y descomenta los permisos,
