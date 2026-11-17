@@ -8,11 +8,7 @@ from contextlib import contextmanager
 
 import psycopg
 
-SCHEMAS = {
-    "t-acme": "t_acme",
-    "t-globex": "t_globex",
-    "t-initech": "t_initech",
-}
+from src import tenants
 
 
 def _dsn():
@@ -31,7 +27,8 @@ def conexion(tenant_id):
     De ahi en adelante los queries van sin prefijo: `SELECT * FROM proyectos`
     ya solo ve las filas de ese tenant.
     """
-    schema = SCHEMAS.get(tenant_id)
+    # La lista de tenants vive en SSM, no en el codigo: ver src/tenants.py.
+    schema = tenants.schema_de(tenant_id)
     if not schema:
         raise ValueError(f"tenant desconocido: {tenant_id}")
     con = psycopg.connect(_dsn())
