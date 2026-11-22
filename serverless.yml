@@ -7,6 +7,11 @@ frameworkVersion: "3"
 
 provider:
   name: aws
+  # Usa la API Gateway unica de infra-compartida en vez de crear una
+  # propia. Todas las rutas de este servicio viven bajo /presupuestos.
+  apiGateway:
+    restApiId: ${cf:infra-compartida-${sls:stage}.ApiId}
+    restApiRootResourceId: ${cf:infra-compartida-${sls:stage}.ApiRootResourceId}
   runtime: python3.12
   region: us-east-1
   stage: ${opt:stage, "dev"}
@@ -62,54 +67,51 @@ custom:
     # deja en root:root mientras el otro lo lee -> EACCES.
     cacheLocation: ./.serverless-cache
   autorizador:
-    # El authorizer vive en infra-compartida y lo comparten los 6 microservicios
-    name: autorizadorCompartido
-    type: request
-    arn: ${cf:infra-compartida-${sls:stage}.AutorizadorArn}
-    resultTtlInSeconds: 300
-    identitySource: method.request.header.Authorization
+    # Registrado una sola vez en la API compartida (infra-compartida).
+    type: CUSTOM
+    authorizerId: ${cf:infra-compartida-${sls:stage}.AutorizadorApiId}
 
 functions:
 
   health:
     handler: src/handlers/health.manejar
     events:
-      - http: { path: "/health", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+      - http: { path: "/presupuestos/health", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
 
   listarPresupuestos:
     handler: src/handlers/presupuestos.listar
     description: Ejecucion presupuestal de todos los proyectos del tenant
     events:
-      - http: { path: "/presupuestos", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+      - http: { path: "/presupuestos/presupuestos", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
 
   obtenerPresupuesto:
     handler: src/handlers/presupuestos.obtener
     description: Detalle con partidas, ultimos gastos y proyeccion de horas
     events:
-      - http: { path: "/presupuestos/{proyecto_id}", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+      - http: { path: "/presupuestos/presupuestos/{proyecto_id}", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
 
   aprobarPresupuesto:
     handler: src/handlers/presupuestos.aprobar
     description: El PMO fija el monto aprobado y las partidas
     events:
-      - http: { path: "/presupuestos/{proyecto_id}/aprobar", method: post, cors: true, authorizer: "${self:custom.autorizador}" }
+      - http: { path: "/presupuestos/presupuestos/{proyecto_id}/aprobar", method: post, cors: true, authorizer: "${self:custom.autorizador}" }
 
   listarGastos:
     handler: src/handlers/presupuestos.listar_gastos
     events:
-      - http: { path: "/presupuestos/{proyecto_id}/gastos", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+      - http: { path: "/presupuestos/presupuestos/{proyecto_id}/gastos", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
 
   registrarGasto:
     handler: src/handlers/presupuestos.registrar_gasto
     description: Publica gasto.registrado y, al cruzar el 90%, presupuesto.excedido
     events:
-      - http: { path: "/presupuestos/{proyecto_id}/gastos", method: post, cors: true, authorizer: "${self:custom.autorizador}" }
+      - http: { path: "/presupuestos/presupuestos/{proyecto_id}/gastos", method: post, cors: true, authorizer: "${self:custom.autorizador}" }
 
   resumenEjecucion:
     handler: src/handlers/presupuestos.resumen
     description: Totales del tenant para el dashboard
     events:
-      - http: { path: "/ejecucion", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
+      - http: { path: "/presupuestos/ejecucion", method: get, cors: true, authorizer: "${self:custom.autorizador}" }
 
   worker:
     handler: src/handlers/worker.manejar
@@ -181,45 +183,4 @@ resources:
                 ArnEquals:
                   aws:SourceArn: ${cf:infra-compartida-${sls:stage}.SnsEventosArn}
 
-    # ---------- CORS en las respuestas de ERROR ----------
-    # API Gateway genera los 401/403 ANTES de llegar a la Lambda, y esas
-    # respuestas no llevan cabeceras CORS. Desde el navegador un 401 se ve
-    # entonces como un error de CORS, no como un 401: el frontend no puede
-    # distinguir "tu sesion vencio" de "el servidor no responde".
-    Cors401:
-      Type: AWS::ApiGateway::GatewayResponse
-      Properties:
-        RestApiId: !Ref ApiGatewayRestApi
-        ResponseType: UNAUTHORIZED
-        StatusCode: "401"
-        ResponseParameters:
-          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
-          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
 
-    Cors403:
-      Type: AWS::ApiGateway::GatewayResponse
-      Properties:
-        RestApiId: !Ref ApiGatewayRestApi
-        ResponseType: ACCESS_DENIED
-        StatusCode: "403"
-        ResponseParameters:
-          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
-          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
-
-    Cors4xx:
-      Type: AWS::ApiGateway::GatewayResponse
-      Properties:
-        RestApiId: !Ref ApiGatewayRestApi
-        ResponseType: DEFAULT_4XX
-        ResponseParameters:
-          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
-          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
-
-    Cors5xx:
-      Type: AWS::ApiGateway::GatewayResponse
-      Properties:
-        RestApiId: !Ref ApiGatewayRestApi
-        ResponseType: DEFAULT_5XX
-        ResponseParameters:
-          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
-          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
