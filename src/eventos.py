@@ -6,20 +6,13 @@ from datetime import datetime, timezone
 
 import boto3
 
-# El cliente se crea UNA vez al cargar el modulo. En Lambda el contenedor se
-# reutiliza entre invocaciones calientes, asi que crearlo aqui ahorra 100-200 ms
-# por evento publicado. Crearlo dentro de publicar() paga ese costo cada vez.
 _sns = boto3.client("sns")
 TOPIC = os.environ["SNS_TOPIC_ARN"]
 ORIGEN = os.environ["SERVICIO"]
 
 
 def publicar(tipo, tenant_id, datos):
-    """Publica un evento. Llamar SIEMPRE despues de confirmar la escritura en BD.
-
-    Los atributos de mensaje son los que usan las filter policies de las colas
-    SQS para quedarse solo con lo que les interesa.
-    """
+    """Publica un evento."""
     if not tipo or not tenant_id:
         raise ValueError("Un evento necesita tipo y tenant_id")
 
@@ -43,8 +36,6 @@ def publicar(tipo, tenant_id, datos):
         },
     )
 
-    # SNS lanza excepcion si falla, pero una respuesta sin MessageId significa
-    # que el evento no quedo publicado y el llamador debe enterarse.
     if not respuesta.get("MessageId"):
         raise RuntimeError(f"SNS no devolvio MessageId al publicar {tipo}")
 

@@ -1,9 +1,4 @@
-"""Presupuesto aprobado, gastos y ejecucion presupuestal.
-
-Responde LA pregunta del producto: cuanto se aprobo, cuanto se gasto y cuanto
-queda. El presupuesto no se crea por HTTP: lo crea el worker cuando
-ms-portafolios publica proyecto.creado.
-"""
+"""Presupuesto aprobado, gastos y ejecucion presupuestal."""
 import os
 import math
 from psycopg.rows import dict_row
@@ -12,8 +7,6 @@ from src import db, roles
 from src.eventos import publicar
 from src.respuesta import cuerpo_de, error, ok, tenant_de, usuario_de
 
-# Al cruzar este porcentaje se publica presupuesto.excedido, que marca el
-# proyecto en riesgo en ms-portafolios y manda la alerta al PMO.
 UMBRAL_ALERTA = float(os.environ.get("UMBRAL_ALERTA_PCT", 90))
 
 
@@ -167,12 +160,7 @@ def listar_gastos(event, context):
 
 
 def registrar_gasto(event, context):
-    """POST /presupuestos/{proyecto_id}/gastos
-
-    Publica gasto.registrado siempre, y presupuesto.excedido la PRIMERA vez
-    que la ejecucion cruza el umbral. Ese segundo evento marca el proyecto en
-    riesgo en ms-portafolios y dispara la alerta al PMO.
-    """
+    """POST /presupuestos/{proyecto_id}/gastos"""
     negado = roles.exige(event, roles.PM, roles.PMO, roles.ADMIN)
     if negado:
         return negado
@@ -192,8 +180,6 @@ def registrar_gasto(event, context):
 
     with db.conexion(tenant_id) as con:
         with con.cursor(row_factory=dict_row) as cur:
-            # FOR UPDATE: dos gastos simultaneos sobre el mismo presupuesto
-            # podrian leer el mismo total y perder uno de los dos incrementos.
             cur.execute("""
                 SELECT id, monto_aprobado, total_gastado, alerta_enviada,
                        codigo_proyecto
@@ -227,8 +213,6 @@ def registrar_gasto(event, context):
             gastado = float(tras["total_gastado"])
             pct = round(100 * gastado / aprobado, 2) if aprobado else 0.0
 
-            # La alerta se manda UNA sola vez: sin esta bandera, cada gasto
-            # posterior al 90% volveria a notificar al PMO.
             alertar = pct >= UMBRAL_ALERTA and not presupuesto["alerta_enviada"]
             if alertar:
                 cur.execute(

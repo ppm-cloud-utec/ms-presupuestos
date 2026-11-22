@@ -1,24 +1,4 @@
-"""Lectura de secretos desde AWS Secrets Manager, en tiempo de ejecucion.
-
-Antes los secretos se resolvian en el DESPLIEGUE:
-
-    environment:
-      JWT_SECRET: ${ssm:/ppm/jwt-secret}
-
-Serverless lee ese valor al desplegar y lo escribe como variable de entorno
-de la Lambda. El secreto queda guardado en la configuracion de la funcion y
-en la plantilla de CloudFormation: cualquiera que pueda abrir la consola de
-Lambda lo lee en texto plano. Con el JWT_SECRET eso es grave, porque permite
-firmar tokens de cualquier tenant.
-
-Ahora la Lambda recibe solo el NOMBRE del secreto y lo resuelve al arrancar.
-Se cachea en memoria porque el contenedor se reutiliza entre invocaciones:
-una lectura por contenedor, no una por request.
-
-Parameter Store sigue usandose para CONFIGURACION que no es secreta, como
-/ppm/tenants. La separacion es deliberada: secretos en Secrets Manager,
-configuracion en Parameter Store.
-"""
+"""Lectura de secretos desde AWS Secrets Manager, en tiempo de ejecucion."""
 import json
 import os
 import time
@@ -49,9 +29,5 @@ def campo(nombre, clave):
 
 
 def de_entorno(variable):
-    """Lee el secreto cuyo NOMBRE viene en esa variable de entorno.
-
-    La variable guarda la RUTA del secreto, nunca su contenido: es lo que
-    permite enseñar la configuracion de la Lambda sin filtrar nada.
-    """
+    """Lee el secreto cuyo NOMBRE viene en esa variable de entorno."""
     return obtener(os.environ[variable])

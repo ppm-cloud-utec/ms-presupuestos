@@ -1,12 +1,5 @@
 
-"""Worker SQS de ms-presupuestos.
-
-Consume:
-    proyecto.creado  -> crea un presupuesto en estado borrador
-    recurso.asignado -> registra la proyeccion de costo
-
-Implementa idempotencia mediante PostgreSQL.
-"""
+"""Worker SQS de ms-presupuestos."""
 
 import json
 
@@ -22,12 +15,7 @@ EVENTOS_SOPORTADOS = {
 
 
 def _ya_procesado(cur, evento_id, tipo):
-    """Registra el evento de forma idempotente.
-
-    Devuelve True si ya fue registrado anteriormente.
-    La insercion participa en la misma transaccion
-    que la operacion de negocio.
-    """
+    """Registra el evento de forma idempotente."""
     cur.execute("""
         INSERT INTO eventos_procesados (evento_id, tipo)
         VALUES (%s, %s)
@@ -93,7 +81,6 @@ def _proyectar_costo(cur, datos):
     ))
 
     return cur.fetchone()
-
 
 
 def manejar(event, context):

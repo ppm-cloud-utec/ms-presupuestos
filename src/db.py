@@ -1,8 +1,4 @@
-"""Conexion a RDS PostgreSQL con aislamiento por schema de tenant.
-
-Patron del enunciado: Single Database, Multiple Schemas. Una database por
-microservicio, y dentro un schema por tenant.
-"""
+"""Conexion a RDS PostgreSQL con aislamiento por schema de tenant."""
 import os
 from contextlib import contextmanager
 
@@ -12,9 +8,6 @@ from src import secretos, tenants
 
 
 def _dsn():
-    # Las credenciales se resuelven aqui, no al desplegar: antes la clave
-    # quedaba grabada como variable de entorno de la Lambda, visible en la
-    # consola. Ver src/secretos.py.
     if os.environ.get("DB_PASSWORD"):  # solo para pruebas locales
         _u, _p = os.environ["DB_USER"], os.environ["DB_PASSWORD"]
     else:
@@ -30,12 +23,7 @@ def _dsn():
 
 @contextmanager
 def conexion(tenant_id):
-    """Abre la conexion y fija el search_path al schema del tenant.
-
-    De ahi en adelante los queries van sin prefijo: `SELECT * FROM proyectos`
-    ya solo ve las filas de ese tenant.
-    """
-    # La lista de tenants vive en SSM, no en el codigo: ver src/tenants.py.
+    """Abre la conexion y fija el search_path al schema del tenant."""
     schema = tenants.schema_de(tenant_id)
     if not schema:
         raise ValueError(f"tenant desconocido: {tenant_id}")
@@ -54,11 +42,6 @@ def conexion(tenant_id):
 
 @contextmanager
 def conexion_admin():
-    """Conexion SIN tenant, para crear o borrar el schema de uno nuevo.
-
-    `conexion(tenant_id)` exige que el tenant ya este habilitado y fija el
-    search_path. En el alta pasa justo lo contrario: el schema todavia no
-    existe. Por eso el aprovisionador entra por aqui.
-    """
+    """Conexion SIN tenant, para crear o borrar el schema de uno nuevo."""
     with psycopg.connect(_dsn()) as con:
         yield con

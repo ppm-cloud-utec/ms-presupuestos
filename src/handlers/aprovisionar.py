@@ -1,19 +1,4 @@
-"""Alta y baja del almacenamiento de un tenant en ESTE microservicio.
-
-Lo invoca la maquina de estados `ppm-aprovisionar-tenant` (infra-compartida).
-La orquestacion no toca esta base de datos por su cuenta: llama a esta Lambda,
-que es la unica que sabe que tablas necesita el servicio. Asi se cumple la
-regla del enunciado de que cada microservicio es dueno de su propia BD, y a la
-vez el alta de una organizacion es un solo flujo observable.
-
-Dos pasos, los dos idempotentes:
-
-    aprovisionar  crea el schema del tenant y aplica su DDL
-    compensar     lo elimina, si un paso posterior del flujo fallo
-
-`compensar` se niega a borrar los tres tenants originales: un rollback mal
-disparado no puede llevarse por delante los datos de la demo.
-"""
+"""Alta y baja del almacenamiento de un tenant en ESTE microservicio."""
 import os
 
 from psycopg import sql
@@ -42,8 +27,6 @@ def aprovisionar(event, context):
 
     with db.conexion_admin() as con:
         with con.cursor() as cur:
-            # Identifier() cita el nombre correctamente; el regex de
-            # tenants.py ya garantizo que solo trae [a-z0-9_].
             cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {} AUTHORIZATION {}")
                         .format(sql.Identifier(schema), sql.Identifier(usuario)))
             cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
@@ -60,11 +43,7 @@ def aprovisionar(event, context):
 
 
 def compensar(event, context):
-    """Deshace el alta: elimina el schema del tenant.
-
-    Solo lo llama el Catch de la maquina de estados. Es idempotente: si el
-    schema no existe, no es un error.
-    """
+    """Deshace el alta: elimina el schema del tenant."""
     tenant_id = event["tenant_id"]
     if tenant_id in PROTEGIDOS:
         raise PermissionError(

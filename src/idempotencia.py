@@ -1,8 +1,4 @@
-"""Control de eventos ya procesados.
-
-SQS entrega at-least-once: el mismo evento puede llegar dos veces. Sin esto, el
-% de avance y la ejecucion presupuestal se inflan y en la demo no cuadran.
-"""
+"""Control de eventos ya procesados."""
 import os
 import time
 

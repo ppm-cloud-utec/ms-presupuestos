@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Carga 30,000 registros en ms-presupuestos, repartidos en 3 tenants.
-
-    python seed/generar.py --esquema
-    python seed/generar.py
-    python seed/generar.py --contar
-
-Reparto por tenant (10,000):
-    presupuestos         500   (uno por proyecto de ms-portafolios)
-    partidas           1,500   (3 por presupuesto)
-    gastos             7,500
-    proyecciones_costo   500
-                      ------
-                      10,000
-"""
+"""Carga 30,000 registros en ms-presupuestos, repartidos en 3 tenants."""
 import os
 import sys
 import uuid
@@ -118,10 +105,6 @@ def generar(tenant_id, perfil):
             for partida_id, presupuesto_id in cur.fetchall():
                 por_presupuesto.setdefault(presupuesto_id, []).append(partida_id)
 
-            # --- gastos ---
-            # Se reparten de forma desigual: unos proyectos quedan al 20% de
-            # ejecucion y otros pasan del 100%, para que el dashboard tenga
-            # semaforos de los 3 colores y casos de alerta reales.
             gastados = {}
             lote = []
             for _ in range(N_GASTOS):
@@ -154,8 +137,6 @@ def generar(tenant_id, perfil):
             total += n_gastos
             print(f"    {n_gastos} gastos")
 
-            # El total_gastado se mantiene al dia en la tabla, igual que lo
-            # hace el handler al registrar cada gasto.
             cur.execute("""
                 UPDATE presupuestos p
                 SET    total_gastado = COALESCE(s.suma, 0),

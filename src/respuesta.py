@@ -13,14 +13,7 @@ CORS = {
 
 
 class _Codificador(json.JSONEncoder):
-    """Serializa lo que json no sabe manejar solo.
-
-    - Decimal: lo devuelve DynamoDB. Se mantiene como entero cuando no tiene
-      parte decimal, para que un COUNT(*) de 3 no llegue al frontend como 3.0.
-    - date / datetime: los devuelve psycopg en las columnas DATE y TIMESTAMPTZ.
-      Sin esto, cualquier endpoint que exponga una fecha revienta con 502.
-    - UUID: los devuelve psycopg en las columnas UUID.
-    """
+    """Serializa lo que json no sabe manejar solo."""
 
     def default(self, o):
         if isinstance(o, Decimal):
@@ -55,11 +48,7 @@ def error(codigo, mensaje, estado=400):
 
 
 def tenant_de(event):
-    """El tenant_id SOLO sale del authorizer, nunca del body ni del query string.
-
-    Si lo lees de otro lado, cualquier usuario puede pedir los datos de otro
-    tenant cambiando un parametro.
-    """
+    """El tenant_id SOLO sale del authorizer, nunca del body ni del query string."""
     return event["requestContext"]["authorizer"]["tenant_id"]
 
 

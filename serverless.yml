@@ -1,14 +1,9 @@
 service: ms-presupuestos
 
-# Se usa la v3 a proposito: la v4 exige una cuenta de serverless.com y un
-# SERVERLESS_ACCESS_KEY para cada deploy. La v3 solo necesita credenciales
-# de AWS, que es lo unico que da el Learner Lab.
 frameworkVersion: "3"
 
 provider:
   name: aws
-  # Usa la API Gateway unica de infra-compartida en vez de crear una
-  # propia. Todas las rutas de este servicio viven bajo /presupuestos.
   apiGateway:
     restApiId: ${cf:infra-compartida-${sls:stage}.ApiId}
     restApiRootResourceId: ${cf:infra-compartida-${sls:stage}.ApiRootResourceId}
@@ -24,31 +19,15 @@ provider:
     TABLA_EVENTOS_PROCESADOS: ${cf:infra-compartida-${sls:stage}.TablaEventosProcesados}
     DB_HOST: ${cf:infra-compartida-${sls:stage}.RdsEndpoint}
     DB_NAME: ppm_presupuestos
-    # Usuario y clave viven juntos en este secreto. Ver src/secretos.py.
     DB_SECRETO: ppm/presupuestos/db
     UMBRAL_ALERTA_PCT: "90"
-  # AWS Academy no permite crear roles IAM: se reusa LabRole.
-  # En una cuenta propia, borra la linea `role:` y descomenta los permisos,
-  # que son los minimos que este microservicio necesita.
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole
-    # role:
-    #   statements:
-  #     - Effect: Allow
-  #       Action:
-  #         - sns:Publish
-  #       Resource: ${cf:infra-compartida-${sls:stage}.SnsEventosArn}
-  #     - Effect: Allow
-  #       Action:
-  #         - dynamodb:PutItem
-  #       Resource: ${cf:infra-compartida-${sls:stage}.TablaEventosProcesadosArn}
-  #
 package:
   individually: false
   patterns:
     - "!**"
     - "src/**"
-    # El aprovisionador lee este DDL para crear el schema de un tenant nuevo.
     - "seed/esquema.sql"
 
 plugins:
@@ -56,18 +35,10 @@ plugins:
 
 custom:
   pythonRequirements:
-    # true, no "non-linux": en Linux "non-linux" NO usa Docker y busca un
-    # binario python3.12 local, que no existe (el sistema trae 3.14).
-    # Forzar Docker ademas garantiza que psycopg se compile contra Amazon
-    # Linux, que es donde corre la Lambda.
     dockerizePip: true
     slim: true
-    # Cache propio por repo. El cache global de ~/.cache lo comparten todos
-    # los servicios, y si dos despliegues corren a la vez un contenedor lo
-    # deja en root:root mientras el otro lo lee -> EACCES.
     cacheLocation: ./.serverless-cache
   autorizador:
-    # Registrado una sola vez en la API compartida (infra-compartida).
     type: CUSTOM
     authorizerId: ${cf:infra-compartida-${sls:stage}.AutorizadorApiId}
 
@@ -122,11 +93,6 @@ functions:
           arn: !GetAtt ColaPresupuestos.Arn
           batchSize: 10
 
-  # ---------- Aprovisionamiento de tenants ----------
-  # Sin evento http: las invoca la maquina de estados
-  # ppm-aprovisionar-tenant. El alta de una organizacion es una operacion de
-  # plataforma, no una operacion dentro de un tenant, asi que no se expone
-  # por la API de negocio.
   aprovisionarTenant:
     handler: src/handlers/aprovisionar.aprovisionar
     name: ms-presupuestos-${sls:stage}-aprovisionarTenant
@@ -182,5 +148,4 @@ resources:
               Condition:
                 ArnEquals:
                   aws:SourceArn: ${cf:infra-compartida-${sls:stage}.SnsEventosArn}
-
 

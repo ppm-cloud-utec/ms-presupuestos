@@ -1,76 +1,39 @@
 # ms-presupuestos
 
-Presupuesto aprobado, gastos y ejecución presupuestal. Responde la pregunta
-central del producto: **¿en qué estamos gastando y cuánto queda?**
+Presupuestos, partidas, gastos y ejecucion presupuestal.
 
-- **Responsable:** @carloscondor1610
-- **Base de datos:** RDS PostgreSQL · database `ppm_presupuestos` · un schema por tenant
-- **Runtime:** Python 3.12 · Serverless Framework · us-east-1
+Parte del proyecto final de Cloud Computing (CS2032), Grupo 4. Todas las rutas cuelgan de la API compartida `ppm-api-dev` bajo `/presupuestos` y, salvo el login, piden el token JWT.
 
-## Endpoints (8, todos protegidos)
+Base de datos: RDS PostgreSQL, base ppm_presupuestos, un schema por organizacion.
 
-| Método | Ruta | Rol | Qué hace |
-|---|---|---|---|
-| GET | `/presupuestos` | todos | ejecución de todos los proyectos · `?en_alerta=true`, paginado |
-| GET | `/presupuestos/{proyecto_id}` | todos | detalle con partidas, últimos gastos y proyección de horas |
-| POST | `/presupuestos/{proyecto_id}/aprobar` | pmo, admin | fija el monto y las partidas |
-| GET | `/presupuestos/{proyecto_id}/gastos` | todos | gastos del proyecto |
-| POST | `/presupuestos/{proyecto_id}/gastos` | pm, pmo, admin | registra · **publica eventos** |
-| GET | `/ejecucion` | todos | totales del tenant, para el dashboard |
-| GET | `/health` | todos | verifica el servicio |
+## Endpoints
 
-## El segundo flujo de eventos de la demo
+- GET /presupuestos/health
+- GET /presupuestos/presupuestos
+- GET /presupuestos/presupuestos/{proyecto_id}
+- POST /presupuestos/presupuestos/{proyecto_id}/aprobar
+- GET /presupuestos/presupuestos/{proyecto_id}/gastos
+- POST /presupuestos/presupuestos/{proyecto_id}/gastos
+- GET /presupuestos/ejecucion
 
-```
-   POST /presupuestos/7/gastos  { monto: 48000 }
-                    |
-     FOR UPDATE + suma a total_gastado  (una transaccion)
-                    |
-         ejecutado_pct = 94%  >= umbral 90%
-                    |
-      publica gasto.registrado  +  presupuesto.excedido
-                    |
-                SNS ppm-eventos
-                 /          \
-   cola-portafolios      cola-alertas
-          |                    |
-  en_riesgo = TRUE        notifica al PMO
-  salud = rojo
-```
+## Eventos
 
-En el dashboard el proyecto **pasa a rojo solo**. Nadie llamó a
-`ms-portafolios`.
+Publica gasto.registrado y presupuesto.excedido. Consume proyecto.creado y recurso.asignado desde su cola SQS.
 
-## Lo que este microservicio NO hace por HTTP
+## Despliegue
 
-**No crea presupuestos.** El presupuesto nace en 0 cuando el worker recibe
-`proyecto.creado` de `ms-portafolios`. Después el PMO lo aprueba con un monto.
-Igualmente, las `proyecciones_costo` las escribe el worker al recibir
-`recurso.asignado` de `ms-recursos`.
-
-Ese es el punto del EDA: este servicio no conoce a los otros dos.
-
-## Desplegar
+Requiere que `infra-compartida` ya este desplegado.
 
 ```bash
-npm install            # instala Serverless v3 y el plugin de Python
+npm install
 npx serverless deploy
 ```
 
-Necesita **Docker corriendo** si este microservicio usa RDS: el plugin compila
-`psycopg` contra Amazon Linux dentro de un contenedor.
+Los servicios con RDS necesitan Docker para compilar psycopg.
 
-## Cargar datos
+## Datos de prueba
 
 ```bash
-export DB_HOST=<endpoint del RDS> DB_USER=ppm_presupuestos DB_PASSWORD=<de SSM>
-export DB_NAME=ppm_presupuestos
-python seed/generar.py --esquema
-python seed/generar.py            # 30,000 registros
+python seed/generar.py
 python seed/generar.py --contar
 ```
-
-## Documentación
-
-- [Modelo de datos](docs/modelo.md) — ER, la vista `ejecucion`, decisiones de diseño
-- [Arquitectura general](https://github.com/ppm-cloud-utec/infra-compartida/blob/main/docs/arquitectura.md)

@@ -1,12 +1,5 @@
 
-"""Pruebas locales de casos limite para ms-presupuestos.
-
-Ejecutar desde la raiz del repositorio:
-    python test_casos_limite.py
-
-Requiere PostgreSQL local, los tres schemas del seed y variables DB_*.
-SNS siempre se simula: no se envian mensajes a AWS.
-"""
+"""Pruebas locales de casos limite para ms-presupuestos."""
 
 import json
 import os
@@ -87,10 +80,6 @@ def mensaje(
     }, e["evento_id"]
 
 
-# ==========================================================
-# PRUEBA 1: ROLES Y VALIDACIONES
-# ==========================================================
-
 def comprobar_validacion():
     casos = [
         ("pm", 100, 403, None),
@@ -122,10 +111,6 @@ def comprobar_validacion():
         )
 
 
-# ==========================================================
-# PRUEBA 2: TENANT DESCONOCIDO
-# ==========================================================
-
 def comprobar_tenant_desconocido():
     try:
         with db.conexion("t_no_existe"):
@@ -139,10 +124,6 @@ def comprobar_tenant_desconocido():
             "Acepto tenant desconocido"
         )
 
-
-# ==========================================================
-# PRUEBA 3: EVENTO DESCONOCIDO
-# ==========================================================
 
 def comprobar_evento_desconocido():
     prueba, _ = mensaje(
@@ -162,10 +143,6 @@ def comprobar_evento_desconocido():
         "omitidos": 1
     }, r
 
-
-# ==========================================================
-# PRUEBA 4: PUBLICACION SNS SIMULADA
-# ==========================================================
 
 def comprobar_sns_simulado():
     sns = MagicMock()
@@ -214,10 +191,6 @@ def comprobar_sns_simulado():
     )
 
 
-# ==========================================================
-# PRUEBA 5: RECURSO ANTES DE CREAR PROYECTO
-# ==========================================================
-
 def comprobar_reintento_sin_proyecto():
     proyecto_id = -(
         uuid4().int % 1_000_000_000 + 1
@@ -262,10 +235,6 @@ def comprobar_reintento_sin_proyecto():
                 "como procesado"
             )
 
-
-# ==========================================================
-# PRUEBA 6: WORKER E IDEMPOTENCIA
-# ==========================================================
 
 def comprobar_worker_integral():
     proyecto_id = -(
@@ -379,10 +348,6 @@ def comprobar_worker_integral():
                 """, (ids_eventos,))
 
 
-# ==========================================================
-# PRUEBA 7: ALERTA DE PRESUPUESTO UNA SOLA VEZ
-# ==========================================================
-
 def comprobar_alerta_una_vez():
     proyecto_id = -(
         uuid4().int % 1_000_000_000 + 1
@@ -480,10 +445,6 @@ def comprobar_alerta_una_vez():
                       AND codigo_proyecto = %s
                 """, (proyecto_id, codigo))
 
-
-# ==========================================================
-# EJECUTAR TODAS LAS PRUEBAS
-# ==========================================================
 
 if __name__ == "__main__":
     print(
