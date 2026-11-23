@@ -39,6 +39,7 @@ PERFILES = {
 }
 
 N_PRESUPUESTOS, N_GASTOS, N_PROYECCIONES = 500, 7_500, 500
+N_RECURSOS = 800  # recursos por tenant en el seed de ms-recursos (ids 1..800)
 
 
 def dsn():
@@ -57,6 +58,52 @@ def aplicar_esquema():
                 cur.execute(sql)
             con.commit()
             print(f"  esquema aplicado en {schema}")
+
+
+def _proyecciones(cur, ids_presupuesto):
+    """Inserta proyecciones de costo con recurso_id de ms-recursos (BIGINT)."""
+    lote, usados = [], set()
+    while len(lote) < N_PROYECCIONES:
+        par = (random.choice(ids_presupuesto), random.randint(1, N_RECURSOS))
+        if par in usados:
+            continue
+        usados.add(par)
+        lote.append((*par, random.choice([8, 16, 20, 30, 40]),
+                     random.choice([25, 35, 50, 70, 90, 120]),
+                     random.randint(2, 24)))
+    cur.executemany("""
+        INSERT INTO proyecciones_costo
+            (presupuesto_id, recurso_id, horas_semana, costo_hora, semanas)
+        VALUES (%s,%s,%s,%s,%s)
+    """, lote)
+    return len(lote)
+
+
+def migrar_recurso_id():
+    """Pasa proyecciones_costo.recurso_id de UUID a BIGINT en todos los schemas.
+
+    Los UUID del seed anterior no corresponden a ningun recurso, asi que se
+    regeneran las proyecciones de los tenants de prueba.
+    """
+    random.seed(2026)
+    with psycopg.connect(dsn()) as con, con.cursor() as cur:
+        cur.execute("""
+            SELECT table_schema FROM information_schema.columns
+            WHERE table_name = 'proyecciones_costo' AND column_name = 'recurso_id'
+              AND data_type = 'uuid' ORDER BY 1
+        """)
+        for (schema,) in cur.fetchall():
+            cur.execute(f"SET search_path TO {schema}")
+            cur.execute("DELETE FROM proyecciones_costo")
+            cur.execute("ALTER TABLE proyecciones_costo "
+                        "ALTER COLUMN recurso_id TYPE BIGINT USING 0")
+            n = 0
+            if schema in SCHEMAS.values():
+                cur.execute("SELECT id FROM presupuestos ORDER BY id")
+                ids = [r[0] for r in cur.fetchall()]
+                n = _proyecciones(cur, ids) if ids else 0
+            print(f"  {schema}: recurso_id -> BIGINT, {n} proyecciones regeneradas")
+        con.commit()
 
 
 def generar(tenant_id, perfil):
@@ -148,24 +195,9 @@ def generar(tenant_id, perfil):
             """)
 
             # --- proyecciones de costo ---
-            lote = []
-            usados = set()
-            while len(lote) < N_PROYECCIONES:
-                pid, _, _ = random.choice(presupuestos)
-                recurso = str(uuid.UUID(int=random.getrandbits(128), version=4))
-                if (pid, recurso) in usados:
-                    continue
-                usados.add((pid, recurso))
-                lote.append((pid, recurso, random.choice([8, 16, 20, 30, 40]),
-                             random.choice([25, 35, 50, 70, 90, 120]),
-                             random.randint(2, 24)))
-            cur.executemany("""
-                INSERT INTO proyecciones_costo
-                    (presupuesto_id, recurso_id, horas_semana, costo_hora, semanas)
-                VALUES (%s,%s,%s,%s,%s)
-            """, lote)
-            total += len(lote)
-            print(f"    {len(lote)} proyecciones de costo")
+            n = _proyecciones(cur, [p[0] for p in presupuestos])
+            total += n
+            print(f"    {n} proyecciones de costo")
 
             # Relleno para llegar exactamente a 10,000
             faltan = 10_000 - total
@@ -213,6 +245,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--esquema", action="store_true")
     ap.add_argument("--contar", action="store_true")
+    ap.add_argument("--migrar-recurso-id", action="store_true")
     ap.add_argument("--tenant", choices=list(SCHEMAS))
     args = ap.parse_args()
 
@@ -224,6 +257,8 @@ def main():
         return aplicar_esquema()
     if args.contar:
         return contar()
+    if args.migrar_recurso_id:
+        return migrar_recurso_id()
 
     random.seed(2026)
     objetivo = {args.tenant: PERFILES[args.tenant]} if args.tenant else PERFILES

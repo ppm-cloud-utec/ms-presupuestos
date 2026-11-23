@@ -75,7 +75,7 @@ def mensaje(
 
     return {
         "Records": [
-            {"body": json.dumps(body)}
+            {"messageId": "msg-prueba", "body": json.dumps(body)}
         ]
     }, e["evento_id"]
 
@@ -198,7 +198,7 @@ def comprobar_reintento_sin_proyecto():
 
     datos = {
         "proyecto_id": proyecto_id,
-        "recurso_id": str(uuid4()),
+        "recurso_id": str(uuid4().int % 1_000_000 + 1),
         "horas_semana": 10,
         "costo_hora": 30,
         "semanas": 2
@@ -210,16 +210,9 @@ def comprobar_reintento_sin_proyecto():
         datos=datos
     )
 
-    try:
-        worker.manejar(evento, None)
-
-    except RuntimeError as exc:
-        assert "no existe" in str(exc), str(exc)
-
-    else:
-        raise AssertionError(
-            "No genero error al faltar el proyecto"
-        )
+    # El mensaje queda reportado como fallido para que SQS lo reintente
+    r = worker.manejar(evento, None)
+    assert r["batchItemFailures"] == [{"itemIdentifier": "msg-prueba"}], r
 
     # Verificar que PostgreSQL hizo ROLLBACK
     with db.conexion(TENANT) as con:
@@ -242,7 +235,7 @@ def comprobar_worker_integral():
     )
 
     codigo = f"TEST-LIM-{abs(proyecto_id)}"
-    recurso_id = str(uuid4())
+    recurso_id = str(uuid4().int % 1_000_000 + 1)
 
     e_crear, id_crear = mensaje(
         "proyecto.creado",

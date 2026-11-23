@@ -92,6 +92,7 @@ functions:
       - sqs:
           arn: !GetAtt ColaPresupuestos.Arn
           batchSize: 10
+          functionResponseType: ReportBatchItemFailures
 
   aprovisionarTenant:
     handler: src/handlers/aprovisionar.aprovisionar

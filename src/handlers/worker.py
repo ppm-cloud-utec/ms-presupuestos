@@ -74,7 +74,7 @@ def _proyectar_costo(cur, datos):
         RETURNING costo_proyectado
     """, (
         presupuesto["id"],
-        datos["recurso_id"],
+        int(datos["recurso_id"]),
         datos.get("horas_semana", 0),
         datos.get("costo_hora", 0),
         datos.get("semanas", 1)
@@ -83,47 +83,43 @@ def _proyectar_costo(cur, datos):
     return cur.fetchone()
 
 
+def _procesar(registro):
+    """Procesa un mensaje. Devuelve True si se aplico y False si se omitio."""
+    sobre = json.loads(registro["body"])
+    evento = json.loads(sobre["Message"]) if "Message" in sobre else sobre
+
+    tipo = evento["tipo"]
+    if tipo not in EVENTOS_SOPORTADOS:
+        return False
+
+    datos = evento.get("datos", {})
+    with db.conexion(evento["tenant_id"]) as con:
+        with con.cursor(row_factory=dict_row) as cur:
+            if _ya_procesado(cur, evento["evento_id"], tipo):
+                return False
+            if tipo == "proyecto.creado":
+                _crear_presupuesto(cur, datos)
+            elif tipo == "recurso.asignado":
+                _proyectar_costo(cur, datos)
+    return True
+
+
 def manejar(event, context):
-    """Procesa los mensajes recibidos mediante SQS."""
-    procesados = 0
-    omitidos = 0
+    """Procesa los mensajes de SQS; solo los que fallan vuelven a la cola."""
+    procesados, omitidos, fallidos = 0, 0, []
 
     for registro in event["Records"]:
-        sobre = json.loads(registro["body"])
-
-        evento = (
-            json.loads(sobre["Message"])
-            if "Message" in sobre
-            else sobre
-        )
-
-        tipo = evento["tipo"]
-        datos = evento.get("datos", {})
-
-        # Descartar eventos no soportados
-        if tipo not in EVENTOS_SOPORTADOS:
-            omitidos += 1
-            continue
-
-        tenant_id = evento["tenant_id"]
-        evento_id = evento["evento_id"]
-
-        with db.conexion(tenant_id) as con:
-            with con.cursor(row_factory=dict_row) as cur:
-
-                if _ya_procesado(cur, evento_id, tipo):
-                    omitidos += 1
-                    continue
-
-                if tipo == "proyecto.creado":
-                    _crear_presupuesto(cur, datos)
-
-                elif tipo == "recurso.asignado":
-                    _proyectar_costo(cur, datos)
-
+        try:
+            if _procesar(registro):
                 procesados += 1
+            else:
+                omitidos += 1
+        except Exception as exc:
+            print(f"ERROR mensaje {registro.get('messageId')}: {type(exc).__name__}: {exc}")
+            fallidos.append({"itemIdentifier": registro.get("messageId")})
 
     return {
         "procesados": procesados,
-        "omitidos": omitidos
+        "omitidos": omitidos,
+        "batchItemFailures": fallidos
     }

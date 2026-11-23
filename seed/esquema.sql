@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS ix_gastos_presupuesto ON gastos (presupuesto_id, fech
 CREATE TABLE IF NOT EXISTS proyecciones_costo (
     id              BIGSERIAL PRIMARY KEY,
     presupuesto_id  BIGINT      NOT NULL REFERENCES presupuestos(id) ON DELETE CASCADE,
-    recurso_id      UUID        NOT NULL,
+    recurso_id      BIGINT      NOT NULL,  -- logico, id de ms-recursos
     horas_semana    NUMERIC(6,2) NOT NULL,
     costo_hora      NUMERIC(10,2) NOT NULL,
     semanas         INTEGER     NOT NULL DEFAULT 1,
