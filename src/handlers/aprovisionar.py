@@ -20,13 +20,15 @@ def aprovisionar(event, context):
     """Crea el schema del tenant y aplica el DDL de este servicio."""
     tenant_id = event["tenant_id"]
     schema = tenants.esquema_para(tenant_id)
-    usuario = os.environ["DB_USER"]
 
     with open(RUTA_DDL, encoding="utf-8") as f:
         ddl = f.read()
 
     with db.conexion_admin() as con:
         with con.cursor() as cur:
+            # Dueno del schema: el mismo usuario de la conexion (sale del secreto).
+            cur.execute("SELECT current_user")
+            usuario = cur.fetchone()[0]
             cur.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {} AUTHORIZATION {}")
                         .format(sql.Identifier(schema), sql.Identifier(usuario)))
             cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
