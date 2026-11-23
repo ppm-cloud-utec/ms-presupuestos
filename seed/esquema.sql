@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS partidas (
     presupuesto_id  BIGINT      NOT NULL REFERENCES presupuestos(id) ON DELETE CASCADE,
     nombre          TEXT        NOT NULL,
     monto_asignado  NUMERIC(14,2) NOT NULL DEFAULT 0,
-    UNIQUE (presupuesto_id, nombre)
+    UNIQUE (presupuesto_id, nombre),
+    -- permite que gastos exija que su partida sea del mismo presupuesto
+    CONSTRAINT partidas_id_presupuesto_key UNIQUE (id, presupuesto_id)
 );
 
 -- ---------------------------------------------------------------------- gastos
@@ -48,7 +50,10 @@ CREATE TABLE IF NOT EXISTS gastos (
     comprobante_key TEXT,
     registrado_por  UUID,
     creado_en       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (monto > 0)
+    CHECK (monto > 0),
+    -- la partida del gasto debe pertenecer al mismo presupuesto
+    CONSTRAINT gastos_partida_presupuesto_fk FOREIGN KEY (partida_id, presupuesto_id)
+        REFERENCES partidas (id, presupuesto_id)
 );
 
 CREATE INDEX IF NOT EXISTS ix_gastos_presupuesto ON gastos (presupuesto_id, fecha DESC);

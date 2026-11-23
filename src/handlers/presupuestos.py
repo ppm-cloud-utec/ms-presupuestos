@@ -190,13 +190,25 @@ def registrar_gasto(event, context):
                 return error("NO_ENCONTRADO",
                              f"El proyecto {proyecto_id} no tiene presupuesto", 404)
 
+            partida_id = c.get("partida_id")
+            if partida_id is not None:
+                try:
+                    partida_id = int(partida_id)
+                except (TypeError, ValueError):
+                    return error("PARTIDA_INVALIDA", "partida_id debe ser un entero", 400)
+                cur.execute("SELECT 1 FROM partidas WHERE id = %s AND presupuesto_id = %s",
+                            (partida_id, presupuesto["id"]))
+                if not cur.fetchone():
+                    return error("PARTIDA_INVALIDA",
+                                 "La partida no pertenece al presupuesto de este proyecto", 400)
+
             cur.execute("""
                 INSERT INTO gastos
                     (presupuesto_id, partida_id, concepto, monto, fecha,
                      proveedor, comprobante_key, registrado_por)
                 VALUES (%s,%s,%s,%s,COALESCE(%s, CURRENT_DATE),%s,%s,%s)
                 RETURNING *
-            """, (presupuesto["id"], c.get("partida_id"), c["concepto"].strip(),
+            """, (presupuesto["id"], partida_id, c["concepto"].strip(),
                   monto, c.get("fecha"), c.get("proveedor"),
                   c.get("comprobante_key"), usuario_de(event)))
             gasto = cur.fetchone()

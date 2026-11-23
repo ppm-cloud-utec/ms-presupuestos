@@ -79,7 +79,7 @@ def _proyecciones(cur, ids_presupuesto):
     return len(lote)
 
 
-def migrar_recurso_id():
+def _migrar_recurso_id():
     """Pasa proyecciones_costo.recurso_id de UUID a BIGINT en todos los schemas.
 
     Los UUID del seed anterior no corresponden a ningun recurso, asi que se
@@ -104,6 +104,46 @@ def migrar_recurso_id():
                 n = _proyecciones(cur, ids) if ids else 0
             print(f"  {schema}: recurso_id -> BIGINT, {n} proyecciones regeneradas")
         con.commit()
+
+
+def _migrar_integridad():
+    """Exige que la partida de cada gasto sea de su mismo presupuesto."""
+    with psycopg.connect(dsn()) as con, con.cursor() as cur:
+        cur.execute("""
+            SELECT table_schema FROM information_schema.tables
+            WHERE table_name = 'gastos' ORDER BY 1
+        """)
+        for (schema,) in cur.fetchall():
+            cur.execute(f"SET search_path TO {schema}")
+            cur.execute("""
+                SELECT conname FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+                WHERE n.nspname = %s AND conname IN
+                    ('partidas_id_presupuesto_key', 'gastos_partida_presupuesto_fk')
+            """, (schema,))
+            hay = {r[0] for r in cur.fetchall()}
+            if "partidas_id_presupuesto_key" not in hay:
+                cur.execute("ALTER TABLE partidas ADD CONSTRAINT partidas_id_presupuesto_key "
+                            "UNIQUE (id, presupuesto_id)")
+            if "gastos_partida_presupuesto_fk" not in hay:
+                cur.execute("""
+                    UPDATE gastos g SET partida_id = NULL
+                    WHERE g.partida_id IS NOT NULL AND NOT EXISTS (
+                        SELECT 1 FROM partidas p
+                        WHERE p.id = g.partida_id AND p.presupuesto_id = g.presupuesto_id)
+                """)
+                if cur.rowcount:
+                    print(f"  {schema}: {cur.rowcount} gastos con partida ajena quedan sin partida")
+                cur.execute("""
+                    ALTER TABLE gastos ADD CONSTRAINT gastos_partida_presupuesto_fk
+                    FOREIGN KEY (partida_id, presupuesto_id) REFERENCES partidas (id, presupuesto_id)
+                """)
+            print(f"  {schema}: integridad partida-presupuesto en gastos")
+        con.commit()
+
+
+def migrar():
+    _migrar_recurso_id()
+    _migrar_integridad()
 
 
 def generar(tenant_id, perfil):
@@ -245,7 +285,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--esquema", action="store_true")
     ap.add_argument("--contar", action="store_true")
-    ap.add_argument("--migrar-recurso-id", action="store_true")
+    ap.add_argument("--migrar", action="store_true")
     ap.add_argument("--tenant", choices=list(SCHEMAS))
     args = ap.parse_args()
 
@@ -257,8 +297,8 @@ def main():
         return aplicar_esquema()
     if args.contar:
         return contar()
-    if args.migrar_recurso_id:
-        return migrar_recurso_id()
+    if args.migrar:
+        return migrar()
 
     random.seed(2026)
     objetivo = {args.tenant: PERFILES[args.tenant]} if args.tenant else PERFILES
