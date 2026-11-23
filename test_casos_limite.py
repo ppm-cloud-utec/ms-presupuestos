@@ -140,7 +140,8 @@ def comprobar_evento_desconocido():
 
     assert r == {
         "procesados": 0,
-        "omitidos": 1
+        "omitidos": 1,
+        "batchItemFailures": []
     }, r
 
 
@@ -151,21 +152,9 @@ def comprobar_sns_simulado():
         "MessageId": "mock-001"
     }
 
-    with patch.dict(
-        os.environ,
-        {
-            "SNS_TOPIC_ARN": (
-                "arn:aws:sns:us-east-1:"
-                "123456789012:prueba"
-            ),
-            "SERVICIO": "ms-presupuestos"
-        }
-    ):
-        with patch.object(
-            eventos.boto3,
-            "client",
-            return_value=sns
-        ):
+    # el cliente se crea al importar eventos, asi que se reemplaza directamente
+    with patch.object(eventos, "_sns", sns):
+        with patch.object(eventos, "TOPIC", "arn:aws:sns:us-east-1:123456789012:prueba"):
             identificador = eventos.publicar(
                 "gasto.registrado",
                 TENANT,
